@@ -2,32 +2,27 @@ import React, { useState, useEffect } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://fastapi-user-roles-api.onrender.com';
 
-// --------------------------------------------------
-// Deterministic Dynamic Color Generator for ALL Roles
-// --------------------------------------------------
 const getRoleBadgeStyle = (roleName) => {
   const name = (roleName || '').trim();
   const lower = name.toLowerCase();
 
-  // 1. Signature anchors for core roles
   if (lower === 'admin') {
-    return { backgroundColor: '#4f46e5', color: '#ffffff', border: '1px solid #6366f1' }; // Electric Indigo
+    return { backgroundColor: '#4f46e5', color: '#ffffff', border: '1px solid #6366f1' };
   }
   if (lower === 'editor') {
-    return { backgroundColor: '#d97706', color: '#ffffff', border: '1px solid #f59e0b' }; // Amber
+    return { backgroundColor: '#d97706', color: '#ffffff', border: '1px solid #f59e0b' };
   }
 
-  // 2. High-contrast vivid palette for ANY current or newly created role
   const palette = [
-    { bg: '#0d9488', border: '#14b8a6' }, // Teal
-    { bg: '#db2777', border: '#f472b6' }, // Neon Rose / Pink
-    { bg: '#059669', border: '#10b981' }, // Emerald Green
-    { bg: '#0284c7', border: '#38bdf8' }, // Sky Blue
-    { bg: '#7c3aed', border: '#a78bfa' }, // Vivid Violet
-    { bg: '#ea580c', border: '#fb923c' }, // Deep Orange
-    { bg: '#2563eb', border: '#60a5fa' }, // Cobalt Blue
-    { bg: '#9333ea', border: '#c084fc' }, // Purple
-    { bg: '#0891b2', border: '#22d3ee' }, // Cyan
+    { bg: '#0d9488', border: '#14b8a6' },
+    { bg: '#db2777', border: '#f472b6' },
+    { bg: '#059669', border: '#10b981' },
+    { bg: '#0284c7', border: '#38bdf8' },
+    { bg: '#7c3aed', border: '#a78bfa' },
+    { bg: '#ea580c', border: '#fb923c' },
+    { bg: '#2563eb', border: '#60a5fa' },
+    { bg: '#9333ea', border: '#c084fc' },
+    { bg: '#0891b2', border: '#22d3ee' },
   ];
 
   let hash = 0;
@@ -35,9 +30,7 @@ const getRoleBadgeStyle = (roleName) => {
     hash = lower.charCodeAt(i) + ((hash << 5) - hash);
   }
 
-  const index = Math.abs(hash) % palette.length;
-  const item = palette[index];
-
+  const item = palette[Math.abs(hash) % palette.length];
   return {
     backgroundColor: item.bg,
     color: '#ffffff',
@@ -46,28 +39,23 @@ const getRoleBadgeStyle = (roleName) => {
 };
 
 export default function App() {
-  // Auth state
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [currentUser, setCurrentUser] = useState(
     JSON.parse(localStorage.getItem('currentUser') || 'null')
   );
-  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+  const [authMode, setAuthMode] = useState('login');
 
-  // Form inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
 
-  // UI state
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Directory Data
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
 
-  // Fetch Directory Data when logged in
   const fetchData = async () => {
     if (!token) return;
     try {
@@ -99,7 +87,6 @@ export default function App() {
     }
   }, [token]);
 
-  // Auth Handlers
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -140,7 +127,6 @@ export default function App() {
         localStorage.setItem('token', data.access_token);
         setToken(data.access_token);
 
-        // Fetch current user details
         const meRes = await fetch(`${API_BASE}/auth/me`, {
           headers: { Authorization: `Bearer ${data.access_token}` },
         });
@@ -166,7 +152,6 @@ export default function App() {
     setRoles([]);
   };
 
-  // Role Assignment (Admin Only)
   const handleAssignRole = async (userId, roleName) => {
     if (!roleName) return;
     setErrorMsg('');
@@ -198,109 +183,184 @@ export default function App() {
     (r) => (r.name || r).toLowerCase() === 'admin'
   );
 
-  // --------------------------------------------------
-  // View 1: Auth Screen
-  // --------------------------------------------------
+  const containerStyle = {
+    minHeight: '100vh',
+    backgroundColor: '#0f172a',
+    color: '#f8fafc',
+    fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '24px',
+    boxSizing: 'border-box',
+  };
+
+  const cardStyle = {
+    width: '100%',
+    maxWidth: '430px',
+    backgroundColor: '#1e293b',
+    border: '1px solid #334155',
+    borderRadius: '16px',
+    padding: '36px 32px',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
+    boxSizing: 'border-box',
+  };
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    backgroundColor: '#0f172a',
+    border: '1px solid #334155',
+    borderRadius: '10px',
+    color: '#ffffff',
+    fontSize: '14px',
+    outline: 'none',
+    boxSizing: 'border-box',
+    marginBottom: '16px',
+  };
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: '11px',
+    fontWeight: '700',
+    letterSpacing: '0.08em',
+    color: '#94a3b8',
+    marginBottom: '6px',
+    textTransform: 'uppercase',
+  };
+
   if (!token) {
     return (
-      <div className="min-h-screen bg-[#0f172a] text-slate-100 flex items-center justify-center p-4 selection:bg-indigo-500 selection:text-white">
-        <div className="w-full max-w-md bg-[#1e293b]/90 border border-slate-800 rounded-2xl shadow-2xl p-8 backdrop-blur-xl">
-          <div className="flex flex-col items-center mb-6">
-            <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center mb-3">
-              <span className="text-2xl">🛡️</span>
+      <div style={containerStyle}>
+        <div style={cardStyle}>
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <div style={{
+              width: '46px',
+              height: '46px',
+              margin: '0 auto 12px',
+              borderRadius: '12px',
+              backgroundColor: 'rgba(99, 102, 241, 0.15)',
+              border: '1px solid rgba(99, 102, 241, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '22px'
+            }}>
+              🛡️
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">AuthGuard Console</h1>
-            <p className="text-xs text-slate-400 mt-1">Identity & Role Management</p>
+            <h1 style={{ margin: '0 0 6px', fontSize: '24px', fontWeight: '800', color: '#ffffff' }}>AuthGuard Console</h1>
+            <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8' }}>Identity &amp; Role Management</p>
           </div>
 
-          <div className="flex bg-[#0f172a]/80 p-1 rounded-xl mb-6 border border-slate-800">
+          <div style={{ display: 'flex', backgroundColor: '#0f172a', padding: '4px', borderRadius: '10px', marginBottom: '22px' }}>
             <button
+              type="button"
               onClick={() => { setAuthMode('login'); setErrorMsg(''); setSuccessMsg(''); }}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                authMode === 'login' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
+              style={{
+                flex: 1,
+                padding: '9px 0',
+                fontSize: '13px',
+                fontWeight: '600',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                backgroundColor: authMode === 'login' ? '#4f46e5' : 'transparent',
+                color: authMode === 'login' ? '#ffffff' : '#94a3b8',
+              }}
             >
               Sign In
             </button>
             <button
+              type="button"
               onClick={() => { setAuthMode('register'); setErrorMsg(''); setSuccessMsg(''); }}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                authMode === 'register' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
-              }`}
+              style={{
+                flex: 1,
+                padding: '9px 0',
+                fontSize: '13px',
+                fontWeight: '600',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                backgroundColor: authMode === 'register' ? '#4f46e5' : 'transparent',
+                color: authMode === 'register' ? '#ffffff' : '#94a3b8',
+              }}
             >
               Register
             </button>
           </div>
 
           {errorMsg && (
-            <div className="mb-4 p-3 bg-red-950/50 border border-red-800/80 rounded-xl text-red-300 text-xs flex items-center gap-2">
-              <span>⚠️</span>
-              <span>{errorMsg}</span>
+            <div style={{ backgroundColor: 'rgba(153, 27, 27, 0.35)', border: '1px solid #b91c1c', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '12px', color: '#fca5a5' }}>
+              ⚠️ {errorMsg}
             </div>
           )}
 
           {successMsg && (
-            <div className="mb-4 p-3 bg-emerald-950/50 border border-emerald-800/80 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
-              <span>✓</span>
-              <span>{successMsg}</span>
+            <div style={{ backgroundColor: 'rgba(6, 95, 70, 0.35)', border: '1px solid #059669', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '12px', color: '#6ee7b7' }}>
+              ✓ {successMsg}
             </div>
           )}
 
-          <form onSubmit={handleAuthSubmit} className="space-y-4">
+          <form onSubmit={handleAuthSubmit}>
             {authMode === 'register' && (
               <div>
-                <label className="block text-[11px] font-bold text-slate-300 tracking-wider mb-1.5 uppercase">
-                  Full Name
-                </label>
+                <label style={labelStyle}>Full Name</label>
                 <input
                   type="text"
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Your Name"
-                  className="w-full px-3.5 py-2.5 bg-[#0f172a]/60 border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                  style={inputStyle}
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-300 tracking-wider mb-1.5 uppercase">
-                Work Email
-              </label>
+              <label style={labelStyle}>Work Email</label>
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="w-full px-3.5 py-2.5 bg-[#0f172a]/60 border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                style={inputStyle}
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-300 tracking-wider mb-1.5 uppercase">
-                Password
-              </label>
+              <label style={labelStyle}>Password</label>
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-3.5 py-2.5 bg-[#0f172a]/60 border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                style={inputStyle}
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800/50 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/20"
+              style={{
+                width: '100%',
+                padding: '13px',
+                backgroundColor: '#4f46e5',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: '700',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1,
+                boxShadow: '0 10px 15px -3px rgba(79, 70, 229, 0.3)',
+                marginTop: '6px',
+              }}
             >
-              {loading
-                ? 'Processing...'
-                : authMode === 'login'
-                ? 'Sign In to Portal →'
-                : 'Create Account (Unassigned) →'}
+              {loading ? 'Processing...' : authMode === 'login' ? 'Sign In to Portal →' : 'Create Account (Unassigned) →'}
             </button>
           </form>
         </div>
@@ -308,25 +368,18 @@ export default function App() {
     );
   }
 
-  // --------------------------------------------------
-  // View 2: User & Role Directory Dashboard
-  // --------------------------------------------------
   return (
-    <div className="min-h-screen bg-[#0f172a] text-slate-100 p-6 md:p-10 selection:bg-indigo-500 selection:text-white">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Top Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-slate-800">
+    <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', color: '#f8fafc', padding: '40px 24px', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '24px', borderBottom: '1px solid #334155', marginBottom: '24px' }}>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">
-              User &amp; Role Directory
-            </h1>
-            <div className="flex items-center gap-2 mt-2 text-sm text-slate-400">
-              <span>Signed in as: <strong className="text-white">{currentUser?.full_name || currentUser?.email}</strong></span>
+            <h1 style={{ margin: '0 0 6px', fontSize: '28px', fontWeight: '800' }}>User &amp; Role Directory</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#94a3b8' }}>
+              <span>Signed in as: <strong style={{ color: '#ffffff' }}>{currentUser?.full_name || currentUser?.email}</strong></span>
               {currentUser?.roles?.map((r) => (
                 <span
                   key={r.id || r.name}
-                  style={getRoleBadgeStyle(r.name || r)}
-                  className="px-2 py-0.5 rounded-md text-[11px] font-bold"
+                  style={{ ...getRoleBadgeStyle(r.name || r), padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '700' }}
                 >
                   {r.name || r}
                 </span>
@@ -335,97 +388,102 @@ export default function App() {
           </div>
           <button
             onClick={handleSignOut}
-            className="px-4 py-2 bg-slate-800/90 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-semibold text-slate-200 transition-all shadow-sm"
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: '8px',
+              color: '#f8fafc',
+              fontSize: '13px',
+              fontWeight: '600',
+              cursor: 'pointer',
+            }}
           >
             Sign Out
           </button>
         </div>
 
-        {/* Notifications */}
         {successMsg && (
-          <div className="p-3.5 bg-emerald-950/40 border border-emerald-800/70 rounded-xl text-emerald-300 text-xs font-medium flex items-center justify-center gap-2">
-            <span>✓</span>
-            <span>{successMsg}</span>
+          <div style={{ backgroundColor: 'rgba(6, 95, 70, 0.35)', border: '1px solid #059669', borderRadius: '10px', padding: '12px', textAlign: 'center', fontSize: '13px', color: '#6ee7b7', marginBottom: '20px' }}>
+            ✓ {successMsg}
           </div>
         )}
 
-        {errorMsg && (
-          <div className="p-3.5 bg-red-950/40 border border-red-800/70 rounded-xl text-red-300 text-xs font-medium flex items-center justify-center gap-2">
-            <span>⚠️</span>
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        {/* Directory Table */}
-        <div className="bg-[#1e293b]/70 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-[#0f172a]/60 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
-                  <th className="py-4 px-6 font-semibold">UID</th>
-                  <th className="py-4 px-6 font-semibold">Name</th>
-                  <th className="py-4 px-6 font-semibold">Email</th>
-                  <th className="py-4 px-6 font-semibold">Assigned Roles</th>
-                  <th className="py-4 px-6 font-semibold text-right">Admin Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="py-4 px-6 font-mono font-medium text-indigo-400">
-                      #{u.id}
-                    </td>
-                    <td className="py-4 px-6 font-semibold text-white">
-                      {u.full_name || '—'}
-                    </td>
-                    <td className="py-4 px-6 text-slate-300 font-mono">
-                      {u.email}
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex flex-wrap gap-1.5 items-center">
-                        {u.roles && u.roles.length > 0 ? (
-                          u.roles.map((r) => (
-                            <span
-                              key={r.id || r.name}
-                              style={getRoleBadgeStyle(r.name || r)}
-                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide shadow-sm"
-                            >
-                              {r.name || r}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-slate-500 italic text-[11px]">Unassigned</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      {isAdmin ? (
-                        <select
-                          defaultValue=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              handleAssignRole(u.id, e.target.value);
-                              e.target.value = '';
-                            }
-                          }}
-                          className="bg-[#0f172a] hover:bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
-                        >
-                          <option value="" disabled>+ Assign Role...</option>
-                          {roles.map((r) => (
-                            <option key={r.id || r.name} value={r.name}>
-                              {r.name}
-                            </option>
-                          ))}
-                        </select>
+        <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#0f172a', borderBottom: '1px solid #334155', color: '#94a3b8', fontSize: '11px', letterSpacing: '0.05em' }}>
+                <th style={{ padding: '16px 20px' }}>UID</th>
+                <th style={{ padding: '16px 20px' }}>NAME</th>
+                <th style={{ padding: '16px 20px' }}>EMAIL</th>
+                <th style={{ padding: '16px 20px' }}>ASSIGNED ROLES</th>
+                <th style={{ padding: '16px 20px', textAlign: 'right' }}>ADMIN ACTION</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} style={{ borderBottom: '1px solid #334155' }}>
+                  <td style={{ padding: '16px 20px', color: '#818cf8', fontFamily: 'monospace', fontWeight: 'bold' }}>#{u.id}</td>
+                  <td style={{ padding: '16px 20px', color: '#ffffff', fontWeight: '600' }}>{u.full_name || '—'}</td>
+                  <td style={{ padding: '16px 20px', color: '#94a3b8', fontFamily: 'monospace' }}>{u.email}</td>
+                  <td style={{ padding: '16px 20px' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {u.roles && u.roles.length > 0 ? (
+                        u.roles.map((r) => (
+                          <span
+                            key={r.id || r.name}
+                            style={{
+                              ...getRoleBadgeStyle(r.name || r),
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              fontWeight: '700',
+                            }}
+                          >
+                            {r.name || r}
+                          </span>
+                        ))
                       ) : (
-                        <span className="text-slate-600 text-[11px] italic">Restricted</span>
+                        <span style={{ color: '#64748b', fontStyle: 'italic', fontSize: '12px' }}>Unassigned</span>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </td>
+                  <td style={{ padding: '16px 20px', textAlign: 'right' }}>
+                    {isAdmin ? (
+                      <select
+                        defaultValue=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleAssignRole(u.id, e.target.value);
+                            e.target.value = '';
+                          }
+                        }}
+                        style={{
+                          backgroundColor: '#0f172a',
+                          border: '1px solid #334155',
+                          borderRadius: '8px',
+                          color: '#ffffff',
+                          padding: '7px 12px',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="" disabled>+ Assign Role...</option>
+                        {roles.map((r) => (
+                          <option key={r.id || r.name} value={r.name}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ color: '#475569', fontStyle: 'italic', fontSize: '12px' }}>Restricted</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

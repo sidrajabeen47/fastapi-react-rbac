@@ -1,584 +1,433 @@
-import React, { useState, useEffect } from "react";
-import { 
-  apiLogin, 
-  apiSignup, 
-  apiGetUsers, 
-  apiGetRoles, 
-  apiAssignRole,
-  getStoredUser, 
-  clearSession 
-} from "./api";
+import React, { useState, useEffect } from 'react';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://fastapi-user-roles-api.onrender.com';
+
+// --------------------------------------------------
+// Deterministic Dynamic Color Generator for ALL Roles
+// --------------------------------------------------
+const getRoleBadgeStyle = (roleName) => {
+  const name = (roleName || '').trim();
+  const lower = name.toLowerCase();
+
+  // 1. Signature anchors for core roles
+  if (lower === 'admin') {
+    return { backgroundColor: '#4f46e5', color: '#ffffff', border: '1px solid #6366f1' }; // Electric Indigo
+  }
+  if (lower === 'editor') {
+    return { backgroundColor: '#d97706', color: '#ffffff', border: '1px solid #f59e0b' }; // Amber
+  }
+
+  // 2. High-contrast vivid palette for ANY current or newly created role
+  const palette = [
+    { bg: '#0d9488', border: '#14b8a6' }, // Teal
+    { bg: '#db2777', border: '#f472b6' }, // Neon Rose / Pink
+    { bg: '#059669', border: '#10b981' }, // Emerald Green
+    { bg: '#0284c7', border: '#38bdf8' }, // Sky Blue
+    { bg: '#7c3aed', border: '#a78bfa' }, // Vivid Violet
+    { bg: '#ea580c', border: '#fb923c' }, // Deep Orange
+    { bg: '#2563eb', border: '#60a5fa' }, // Cobalt Blue
+    { bg: '#9333ea', border: '#c084fc' }, // Purple
+    { bg: '#0891b2', border: '#22d3ee' }, // Cyan
+  ];
+
+  let hash = 0;
+  for (let i = 0; i < lower.length; i++) {
+    hash = lower.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const index = Math.abs(hash) % palette.length;
+  const item = palette[index];
+
+  return {
+    backgroundColor: item.bg,
+    color: '#ffffff',
+    border: `1px solid ${item.border}`,
+  };
+};
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(getStoredUser());
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  // Auth state
+  const [token, setToken] = useState(localStorage.getItem('token') || '');
+  const [currentUser, setCurrentUser] = useState(
+    JSON.parse(localStorage.getItem('currentUser') || 'null')
+  );
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
 
-  const [users, setUsers] = useState([]);
-  const [roles, setRoles] = useState([]);
-  const [error, setError] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
+  // Form inputs
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+
+  // UI state
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (currentUser) {
-      loadDashboardData();
-    }
-  }, [currentUser]);
+  // Directory Data
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
 
-  const loadDashboardData = async () => {
+  // Fetch Directory Data when logged in
+  const fetchData = async () => {
+    if (!token) return;
     try {
-      setError("");
-      setLoading(true);
-      const [usersData, rolesData] = await Promise.all([
-        apiGetUsers(),
-        apiGetRoles()
+      const [resUsers, resRoles] = await Promise.all([
+        fetch(`${API_BASE}/users`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_BASE}/roles`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
       ]);
-      setUsers(usersData);
-      setRoles(rolesData);
+
+      if (resUsers.ok && resRoles.ok) {
+        const uData = await resUsers.json();
+        const rData = await resRoles.json();
+        setUsers(uData);
+        setRoles(rData);
+      } else if (resUsers.status === 401 || resRoles.status === 401) {
+        handleSignOut();
+      }
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      console.error('Fetch error:', err);
     }
   };
 
+  useEffect(() => {
+    if (token) {
+      fetchData();
+    }
+  }, [token]);
+
+  // Auth Handlers
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
-    setError("");
-    setSuccessMsg("");
+    setErrorMsg('');
+    setSuccessMsg('');
     setLoading(true);
 
     try {
-      let userData;
-      if (isSignUp) {
-        userData = await apiSignup(name, email, password);
+      if (authMode === 'register') {
+        const res = await fetch(`${API_BASE}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+            full_name: fullName.trim(),
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Registration failed');
+
+        setSuccessMsg('Account registered successfully! Please sign in.');
+        setAuthMode('login');
       } else {
-        userData = await apiLogin(email, password);
+        const formData = new URLSearchParams();
+        formData.append('username', email.trim());
+        formData.append('password', password);
+
+        const res = await fetch(`${API_BASE}/auth/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Invalid email or password');
+
+        localStorage.setItem('token', data.access_token);
+        setToken(data.access_token);
+
+        // Fetch current user details
+        const meRes = await fetch(`${API_BASE}/auth/me`, {
+          headers: { Authorization: `Bearer ${data.access_token}` },
+        });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          localStorage.setItem('currentUser', JSON.stringify(meData));
+          setCurrentUser(meData);
+        }
       }
-      setCurrentUser(userData);
-      setName("");
-      setEmail("");
-      setPassword("");
     } catch (err) {
-      setError(err.message);
+      setErrorMsg(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAssignRole = async (userId, roleId) => {
-    if (!roleId) return;
-    setError("");
-    setSuccessMsg("");
-
-    try {
-      await apiAssignRole(userId, parseInt(roleId));
-      setSuccessMsg("Role clearance updated successfully!");
-      loadDashboardData();
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleLogout = () => {
-    clearSession();
+  const handleSignOut = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('currentUser');
+    setToken('');
     setCurrentUser(null);
     setUsers([]);
     setRoles([]);
   };
 
-  const isAdmin = currentUser?.role === "Admin";
+  // Role Assignment (Admin Only)
+  const handleAssignRole = async (userId, roleName) => {
+    if (!roleName) return;
+    setErrorMsg('');
+    setSuccessMsg('');
 
-  const getRoleBadgeStyle = (roleName) => {
-    switch (roleName) {
-      case "Admin":
-        return { background: "#4338ca", color: "#e0e7ff", border: "1px solid #6366f1" };
-      case "Security Analyst":
-        return { background: "#0369a1", color: "#e0f2fe", border: "1px solid #38bdf8" };
-      case "Cipher Cadet":
-        return { background: "#15803d", color: "#dcfce7", border: "1px solid #4ade80" };
-      case "Editor":
-        return { background: "#b45309", color: "#fef3c7", border: "1px solid #f59e0b" };
-      default:
-        return { background: "#334155", color: "#94a3b8", border: "1px solid #475569" };
+    try {
+      const res = await fetch(`${API_BASE}/users/${userId}/roles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ role_name: roleName }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to update role');
+
+      setSuccessMsg('Role clearance updated successfully!');
+      fetchData();
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err) {
+      setErrorMsg(err.message);
+      setTimeout(() => setErrorMsg(''), 4000);
     }
   };
 
-  return (
-    <div className="aurora-scope">
-      <style>{`
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
-        }
+  const isAdmin = currentUser?.roles?.some(
+    (r) => (r.name || r).toLowerCase() === 'admin'
+  );
 
-        body {
-          background-color: #1e1b4b;
-          color: #f8fafc;
-        }
+  // --------------------------------------------------
+  // View 1: Auth Screen
+  // --------------------------------------------------
+  if (!token) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] text-slate-100 flex items-center justify-center p-4 selection:bg-indigo-500 selection:text-white">
+        <div className="w-full max-w-md bg-[#1e293b]/90 border border-slate-800 rounded-2xl shadow-2xl p-8 backdrop-blur-xl">
+          <div className="flex flex-col items-center mb-6">
+            <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center mb-3">
+              <span className="text-2xl">🛡️</span>
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-white">AuthGuard Console</h1>
+            <p className="text-xs text-slate-400 mt-1">Identity & Role Management</p>
+          </div>
 
-        .aurora-scope {
-          min-height: 100vh;
-          width: 100vw;
-          background: linear-gradient(135deg, #1e1b4b 0%, #312e81 35%, #1e293b 70%, #0f172a 100%);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 36px 20px;
-        }
-
-        /* ---------------- AUTH CARD ---------------- */
-        .glass-auth-box {
-          width: 100%;
-          max-width: 440px;
-          background: linear-gradient(180deg, rgba(30, 27, 75, 0.85) 0%, rgba(15, 23, 42, 0.9) 100%);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1px solid rgba(129, 140, 248, 0.3);
-          border-radius: 20px;
-          padding: 40px 34px;
-          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(99, 102, 241, 0.25);
-        }
-
-        .logo-glow {
-          width: 50px;
-          height: 50px;
-          margin: 0 auto 16px;
-          background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 24px;
-          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.45);
-        }
-
-        .auth-head-title {
-          font-size: 24px;
-          font-weight: 700;
-          color: #ffffff;
-          text-align: center;
-          letter-spacing: -0.4px;
-        }
-
-        .auth-head-sub {
-          font-size: 13px;
-          color: #c7d2fe;
-          text-align: center;
-          margin-top: 6px;
-          margin-bottom: 26px;
-        }
-
-        .tab-wrap {
-          display: flex;
-          background: rgba(15, 23, 42, 0.6);
-          border: 1px solid rgba(129, 140, 248, 0.2);
-          padding: 4px;
-          border-radius: 10px;
-          margin-bottom: 24px;
-        }
-
-        .tab-item {
-          flex: 1;
-          padding: 10px 0;
-          font-size: 13px;
-          font-weight: 600;
-          color: #cbd5e1;
-          background: transparent;
-          border: none;
-          border-radius: 7px;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .tab-item.active {
-          background: #4f46e5;
-          color: #ffffff;
-          box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
-        }
-
-        .input-title {
-          display: block;
-          font-size: 12px;
-          font-weight: 600;
-          color: #e0e7ff;
-          margin-bottom: 7px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .custom-field {
-          width: 100%;
-          padding: 12px 14px;
-          background: rgba(15, 23, 42, 0.7);
-          border: 1.5px solid rgba(129, 140, 248, 0.3);
-          border-radius: 9px;
-          color: #ffffff;
-          font-size: 14px;
-          outline: none;
-          transition: all 0.2s;
-          margin-bottom: 16px;
-        }
-
-        .custom-field:focus {
-          border-color: #818cf8;
-          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
-          background: rgba(15, 23, 42, 0.95);
-        }
-
-        .action-cta {
-          width: 100%;
-          padding: 13px;
-          margin-top: 6px;
-          background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
-          color: #ffffff;
-          font-size: 14px;
-          font-weight: 600;
-          border: none;
-          border-radius: 9px;
-          cursor: pointer;
-          transition: all 0.2s;
-          box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
-        }
-
-        .action-cta:hover {
-          background: linear-gradient(135deg, #4338ca 0%, #1d4ed8 100%);
-          transform: translateY(-1px);
-        }
-
-        .action-cta:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          transform: none;
-        }
-
-        .alert-error {
-          background: rgba(220, 38, 38, 0.2);
-          border: 1px solid rgba(248, 113, 113, 0.4);
-          color: #fca5a5;
-          padding: 11px 14px;
-          border-radius: 9px;
-          font-size: 13px;
-          margin-bottom: 18px;
-        }
-
-        .alert-success {
-          background: rgba(16, 185, 129, 0.2);
-          border: 1px solid rgba(52, 211, 153, 0.4);
-          color: #86efac;
-          padding: 11px 14px;
-          border-radius: 9px;
-          font-size: 13px;
-          margin-bottom: 18px;
-        }
-
-        /* ---------------- DASHBOARD ---------------- */
-        .dash-indigo-card {
-          width: 100%;
-          max-width: 1120px;
-          background: linear-gradient(180deg, rgba(30, 27, 75, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%);
-          backdrop-filter: blur(16px);
-          border: 1px solid rgba(129, 140, 248, 0.25);
-          border-radius: 20px;
-          box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5), 0 0 35px rgba(99, 102, 241, 0.15);
-          overflow: hidden;
-        }
-
-        .dash-indigo-nav {
-          padding: 24px 32px;
-          background: rgba(49, 46, 129, 0.35);
-          border-bottom: 1px solid rgba(129, 140, 248, 0.2);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .dash-heading-main {
-          font-size: 21px;
-          font-weight: 700;
-          color: #ffffff;
-        }
-
-        .dash-subhead {
-          font-size: 13px;
-          color: #c7d2fe;
-          margin-top: 5px;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .user-tag {
-          color: #ffffff;
-          font-weight: 600;
-        }
-
-        .role-chip {
-          background: rgba(99, 102, 241, 0.25);
-          color: #c7d2fe;
-          border: 1px solid rgba(129, 140, 248, 0.4);
-          font-size: 12px;
-          font-weight: 600;
-          padding: 2px 9px;
-          border-radius: 6px;
-        }
-
-        .exit-btn {
-          background: rgba(15, 23, 42, 0.6);
-          border: 1.5px solid rgba(129, 140, 248, 0.3);
-          color: #f8fafc;
-          padding: 8px 18px;
-          border-radius: 8px;
-          font-size: 13px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .exit-btn:hover {
-          background: #ef4444;
-          border-color: #ef4444;
-        }
-
-        .grid-wrapper {
-          padding: 28px 32px;
-        }
-
-        .indigo-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 13px;
-        }
-
-        .indigo-table th {
-          text-align: left;
-          color: #c7d2fe;
-          font-weight: 600;
-          font-size: 11px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          padding: 12px 16px;
-          border-bottom: 1px solid rgba(129, 140, 248, 0.2);
-          background: rgba(49, 46, 129, 0.2);
-        }
-
-        .indigo-table td {
-          padding: 15px 16px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-          color: #f1f5f9;
-        }
-
-        .indigo-table tr:hover td {
-          background: rgba(99, 102, 241, 0.08);
-        }
-
-        .badge-style {
-          display: inline-block;
-          font-size: 11px;
-          font-weight: 600;
-          padding: 4px 10px;
-          border-radius: 6px;
-          margin-right: 4px;
-        }
-
-        .unassigned-badge {
-          color: #94a3b8;
-          font-style: italic;
-          font-size: 12px;
-        }
-
-        .role-picker {
-          background: rgba(15, 23, 42, 0.9);
-          color: #ffffff;
-          border: 1.5px solid rgba(129, 140, 248, 0.3);
-          border-radius: 7px;
-          padding: 7px 12px;
-          font-size: 12px;
-          outline: none;
-          cursor: pointer;
-        }
-
-        .role-picker:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-      `}</style>
-
-      {/* VIEW 1: SIGN IN / SIGN UP */}
-      {!currentUser ? (
-        <div className="glass-auth-box">
-          <div className="logo-glow">🛡️</div>
-          <h1 className="auth-head-title">AuthGuard Console</h1>
-          <p className="auth-head-sub">Identity & Role Management</p>
-
-          <div className="tab-wrap">
-            <button 
-              className={`tab-item ${!isSignUp ? "active" : ""}`}
-              onClick={() => { setIsSignUp(false); setError(""); setSuccessMsg(""); }}
+          <div className="flex bg-[#0f172a]/80 p-1 rounded-xl mb-6 border border-slate-800">
+            <button
+              onClick={() => { setAuthMode('login'); setErrorMsg(''); setSuccessMsg(''); }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                authMode === 'login' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
             >
               Sign In
             </button>
-            <button 
-              className={`tab-item ${isSignUp ? "active" : ""}`}
-              onClick={() => { setIsSignUp(true); setError(""); setSuccessMsg(""); }}
+            <button
+              onClick={() => { setAuthMode('register'); setErrorMsg(''); setSuccessMsg(''); }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                authMode === 'register' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
             >
               Register
             </button>
           </div>
 
-          {error && <div className="alert-error">⚠️ {error}</div>}
-          {successMsg && <div className="alert-success">✓ {successMsg}</div>}
+          {errorMsg && (
+            <div className="mb-4 p-3 bg-red-950/50 border border-red-800/80 rounded-xl text-red-300 text-xs flex items-center gap-2">
+              <span>⚠️</span>
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
-          <form onSubmit={handleAuthSubmit}>
-            {isSignUp && (
+          {successMsg && (
+            <div className="mb-4 p-3 bg-emerald-950/50 border border-emerald-800/80 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+              <span>✓</span>
+              <span>{successMsg}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
+            {authMode === 'register' && (
               <div>
-                <label className="input-title">Full Name</label>
+                <label className="block text-[11px] font-bold text-slate-300 tracking-wider mb-1.5 uppercase">
+                  Full Name
+                </label>
                 <input
                   type="text"
-                  placeholder="e.g. Sidra Jabeen"
-                  className="custom-field"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
                   required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Your Name"
+                  className="w-full px-3.5 py-2.5 bg-[#0f172a]/60 border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                 />
               </div>
             )}
 
             <div>
-              <label className="input-title">Work Email</label>
+              <label className="block text-[11px] font-bold text-slate-300 tracking-wider mb-1.5 uppercase">
+                Work Email
+              </label>
               <input
                 type="email"
-                placeholder="name@example.com"
-                className="custom-field"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
+                placeholder="name@example.com"
+                className="w-full px-3.5 py-2.5 bg-[#0f172a]/60 border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
               />
             </div>
 
-            <div style={{ position: "relative" }}>
-              <label className="input-title">Password</label>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 tracking-wider mb-1.5 uppercase">
+                Password
+              </label>
               <input
-                type={showPassword ? "text" : "password"}
-                placeholder="••••••••••••"
-                className="custom-field"
-                style={{ paddingRight: "44px" }}
+                type="password"
+                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
+                placeholder="••••••••"
+                className="w-full px-3.5 py-2.5 bg-[#0f172a]/60 border border-slate-700/80 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: "absolute",
-                  right: "12px",
-                  top: "36px",
-                  background: "none",
-                  border: "none",
-                  color: "#cbd5e1",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                }}
-              >
-                {showPassword ? "👁️" : "🙈"}
-              </button>
             </div>
 
-            <button type="submit" className="action-cta" disabled={loading}>
-              {loading ? "Authorizing..." : isSignUp ? "Create Account (Unassigned) →" : "Sign In →"}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full mt-2 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800/50 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/20"
+            >
+              {loading
+                ? 'Processing...'
+                : authMode === 'login'
+                ? 'Sign In to Portal →'
+                : 'Create Account (Unassigned) →'}
             </button>
           </form>
         </div>
-      ) : (
-        /* VIEW 2: DASHBOARD */
-        <div className="dash-indigo-card">
-          <div className="dash-indigo-nav">
-            <div>
-              <h2 className="dash-heading-main">User & Role Directory</h2>
-              <div className="dash-subhead">
-                Signed in as: <span className="user-tag">{currentUser.user_name}</span>
-                <span className="role-chip">{currentUser.role}</span>
-                {!isAdmin && (
-                  <span style={{ color: "#94a3b8", marginLeft: 4 }}>
-                    (Read-Only: Admin role required to modify assignments)
-                  </span>
-                )}
-              </div>
+      </div>
+    );
+  }
+
+  // --------------------------------------------------
+  // View 2: User & Role Directory Dashboard
+  // --------------------------------------------------
+  return (
+    <div className="min-h-screen bg-[#0f172a] text-slate-100 p-6 md:p-10 selection:bg-indigo-500 selection:text-white">
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Top Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-slate-800">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">
+              User &amp; Role Directory
+            </h1>
+            <div className="flex items-center gap-2 mt-2 text-sm text-slate-400">
+              <span>Signed in as: <strong className="text-white">{currentUser?.full_name || currentUser?.email}</strong></span>
+              {currentUser?.roles?.map((r) => (
+                <span
+                  key={r.id || r.name}
+                  style={getRoleBadgeStyle(r.name || r)}
+                  className="px-2 py-0.5 rounded-md text-[11px] font-bold"
+                >
+                  {r.name || r}
+                </span>
+              ))}
             </div>
-
-            <button onClick={handleLogout} className="exit-btn">
-              Sign Out
-            </button>
           </div>
+          <button
+            onClick={handleSignOut}
+            className="px-4 py-2 bg-slate-800/90 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-semibold text-slate-200 transition-all shadow-sm"
+          >
+            Sign Out
+          </button>
+        </div>
 
-          <div className="grid-wrapper">
-            {error && <div className="alert-error">⚠️ {error}</div>}
-            {successMsg && <div className="alert-success">✓ {successMsg}</div>}
+        {/* Notifications */}
+        {successMsg && (
+          <div className="p-3.5 bg-emerald-950/40 border border-emerald-800/70 rounded-xl text-emerald-300 text-xs font-medium flex items-center justify-center gap-2">
+            <span>✓</span>
+            <span>{successMsg}</span>
+          </div>
+        )}
 
-            {loading ? (
-              <p style={{ color: "#c7d2fe", fontSize: 13 }}>Querying directory records...</p>
-            ) : (
-              <table className="indigo-table">
-                <thead>
-                  <tr>
-                    <th style={{ borderRadius: "8px 0 0 8px" }}>UID</th>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Assigned Roles</th>
-                    <th style={{ borderRadius: "0 8px 8px 0" }}>Admin Action: Assign Role</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id}>
-                      <td style={{ fontFamily: "monospace", color: "#818cf8", fontWeight: 600 }}>
-                        #{u.id}
-                      </td>
-                      <td style={{ fontWeight: 600, color: "#ffffff" }}>{u.name}</td>
-                      <td style={{ color: "#cbd5e1" }}>{u.email}</td>
-                      <td>
+        {errorMsg && (
+          <div className="p-3.5 bg-red-950/40 border border-red-800/70 rounded-xl text-red-300 text-xs font-medium flex items-center justify-center gap-2">
+            <span>⚠️</span>
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {/* Directory Table */}
+        <div className="bg-[#1e293b]/70 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#0f172a]/60 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400">
+                  <th className="py-4 px-6 font-semibold">UID</th>
+                  <th className="py-4 px-6 font-semibold">Name</th>
+                  <th className="py-4 px-6 font-semibold">Email</th>
+                  <th className="py-4 px-6 font-semibold">Assigned Roles</th>
+                  <th className="py-4 px-6 font-semibold text-right">Admin Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {users.map((u) => (
+                  <tr key={u.id} className="hover:bg-slate-800/30 transition-colors">
+                    <td className="py-4 px-6 font-mono font-medium text-indigo-400">
+                      #{u.id}
+                    </td>
+                    <td className="py-4 px-6 font-semibold text-white">
+                      {u.full_name || '—'}
+                    </td>
+                    <td className="py-4 px-6 text-slate-300 font-mono">
+                      {u.email}
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex flex-wrap gap-1.5 items-center">
                         {u.roles && u.roles.length > 0 ? (
                           u.roles.map((r) => (
-                            <span key={r.id} className="badge-style" style={getRoleBadgeStyle(r.name)}>
-                              {r.name}
+                            <span
+                              key={r.id || r.name}
+                              style={getRoleBadgeStyle(r.name || r)}
+                              className="px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide shadow-sm"
+                            >
+                              {r.name || r}
                             </span>
                           ))
                         ) : (
-                          <span className="unassigned-badge">Unassigned</span>
+                          <span className="text-slate-500 italic text-[11px]">Unassigned</span>
                         )}
-                      </td>
-                      <td>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      {isAdmin ? (
                         <select
-                          className="role-picker"
-                          disabled={!isAdmin}
                           defaultValue=""
-                          onChange={(e) => handleAssignRole(u.id, e.target.value)}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              handleAssignRole(u.id, e.target.value);
+                              e.target.value = '';
+                            }
+                          }}
+                          className="bg-[#0f172a] hover:bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
                         >
-                          <option value="" disabled>
-                            {isAdmin ? "+ Assign Role..." : "Admin Required"}
-                          </option>
-                          {roles.map((role) => (
-                            <option key={role.id} value={role.id}>
-                              {role.name}
+                          <option value="" disabled>+ Assign Role...</option>
+                          {roles.map((r) => (
+                            <option key={r.id || r.name} value={r.name}>
+                              {r.name}
                             </option>
                           ))}
                         </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                      ) : (
+                        <span className="text-slate-600 text-[11px] italic">Restricted</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

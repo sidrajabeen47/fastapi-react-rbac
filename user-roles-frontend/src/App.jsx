@@ -2,45 +2,41 @@ import React, { useState, useEffect } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://fastapi-user-roles-api.onrender.com';
 
-// --------------------------------------------------
-// Dynamic High-Contrast Role Badge Color Generator
-// --------------------------------------------------
+// Dynamic Colorful Badges: Har role ko unique bright color milega
 const getRoleBadgeStyle = (roleName) => {
   const name = (roleName || '').trim();
   const lower = name.toLowerCase();
 
-  // Core anchor roles
   if (lower === 'admin') {
-    return { backgroundColor: '#4f46e5', color: '#ffffff', border: '1px solid #6366f1' };
+    return 'background: #6366f1; color: #ffffff; border: 1px solid #818cf8;';
   }
   if (lower === 'editor') {
-    return { backgroundColor: '#d97706', color: '#ffffff', border: '1px solid #f59e0b' };
+    return 'background: #d97706; color: #ffffff; border: 1px solid #f59e0b;';
+  }
+  if (lower === 'developer') {
+    return 'background: #0d9488; color: #ffffff; border: 1px solid #14b8a6;';
+  }
+  if (lower === 'hacker') {
+    return 'background: #db2777; color: #ffffff; border: 1px solid #f472b6;';
+  }
+  if (lower.includes('sentinel') || lower.includes('cyber')) {
+    return 'background: #059669; color: #ffffff; border: 1px solid #10b981;';
   }
 
-  // Vivid Palette for ALL other custom and newly created roles
-  const palette = [
-    { bg: '#0d9488', border: '#14b8a6' }, // Teal
-    { bg: '#db2777', border: '#f472b6' }, // Pink / Rose
-    { bg: '#059669', border: '#10b981' }, // Emerald
-    { bg: '#0284c7', border: '#38bdf8' }, // Sky Blue
-    { bg: '#7c3aed', border: '#a78bfa' }, // Violet
-    { bg: '#ea580c', border: '#fb923c' }, // Orange
-    { bg: '#2563eb', border: '#60a5fa' }, // Blue
-    { bg: '#9333ea', border: '#c084fc' }, // Purple
-    { bg: '#0891b2', border: '#22d3ee' }, // Cyan
+  // Any other custom role palette
+  const colors = [
+    { bg: '#7c3aed', b: '#a78bfa' }, // Purple
+    { bg: '#0284c7', b: '#38bdf8' }, // Sky Blue
+    { bg: '#ea580c', b: '#fb923c' }, // Orange
+    { bg: '#2563eb', b: '#60a5fa' }, // Blue
   ];
 
   let hash = 0;
   for (let i = 0; i < lower.length; i++) {
     hash = lower.charCodeAt(i) + ((hash << 5) - hash);
   }
-
-  const item = palette[Math.abs(hash) % palette.length];
-  return {
-    backgroundColor: item.bg,
-    color: '#ffffff',
-    border: `1px solid ${item.border}`,
-  };
+  const item = colors[Math.abs(hash) % colors.length];
+  return `background: ${item.bg}; color: #ffffff; border: 1px solid ${item.b};`;
 };
 
 export default function App() {
@@ -61,29 +57,22 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
 
-  // Fetch directory list
-  const fetchData = async (currentToken = token) => {
-    if (!currentToken) return;
+  const fetchData = async (activeToken = token) => {
+    if (!activeToken) return;
     try {
       const [resUsers, resRoles] = await Promise.all([
-        fetch(`${API_BASE}/users`, {
-          headers: { Authorization: `Bearer ${currentToken}` },
-        }),
-        fetch(`${API_BASE}/roles`, {
-          headers: { Authorization: `Bearer ${currentToken}` },
-        }),
+        fetch(`${API_BASE}/users`, { headers: { Authorization: `Bearer ${activeToken}` } }),
+        fetch(`${API_BASE}/roles`, { headers: { Authorization: `Bearer ${activeToken}` } }),
       ]);
 
       if (resUsers.ok && resRoles.ok) {
-        const uData = await resUsers.json();
-        const rData = await resRoles.json();
-        setUsers(uData);
-        setRoles(rData);
-      } else if (resUsers.status === 401 || resRoles.status === 401) {
+        setUsers(await resUsers.json());
+        setRoles(await resRoles.json());
+      } else if (resUsers.status === 401) {
         handleSignOut();
       }
     } catch (err) {
-      console.error('Fetch directory error:', err);
+      console.error(err);
     }
   };
 
@@ -93,7 +82,6 @@ export default function App() {
     }
   }, [token]);
 
-  // Auth Handler with /login and /signup endpoints
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -102,18 +90,12 @@ export default function App() {
 
     try {
       if (authMode === 'register') {
-        const payload = JSON.stringify({
-          email: email.trim(),
-          password,
-          full_name: fullName.trim(),
-        });
-
+        const payload = JSON.stringify({ email: email.trim(), password, full_name: fullName.trim() });
         let res = await fetch(`${API_BASE}/signup`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: payload,
         });
-
         if (res.status === 404) {
           res = await fetch(`${API_BASE}/auth/register`, {
             method: 'POST',
@@ -121,18 +103,12 @@ export default function App() {
             body: payload,
           });
         }
-
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Registration failed');
-
-        setSuccessMsg('Account registered successfully! Please sign in.');
+        setSuccessMsg('Registration successful! Please login.');
         setAuthMode('login');
       } else {
-        const payload = JSON.stringify({
-          email: email.trim(),
-          password: password,
-        });
-
+        const payload = JSON.stringify({ email: email.trim(), password });
         let res = await fetch(`${API_BASE}/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -140,47 +116,40 @@ export default function App() {
         });
 
         if (res.status === 404 || res.status === 422) {
-          const formData = new URLSearchParams();
-          formData.append('username', email.trim());
-          formData.append('password', password);
-
+          const form = new URLSearchParams();
+          form.append('username', email.trim());
+          form.append('password', password);
           res = await fetch(`${API_BASE}/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: formData,
+            body: form,
           });
         }
 
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Invalid email or password');
 
-        const userToken = data.access_token || data.token;
-        localStorage.setItem('token', userToken);
-        setToken(userToken);
+        const activeToken = data.access_token || data.token;
+        localStorage.setItem('token', activeToken);
+        setToken(activeToken);
 
         if (data.user) {
           localStorage.setItem('currentUser', JSON.stringify(data.user));
           setCurrentUser(data.user);
         } else {
           let meRes = await fetch(`${API_BASE}/users/me`, {
-            headers: { Authorization: `Bearer ${userToken}` },
+            headers: { Authorization: `Bearer ${activeToken}` },
           });
-          if (meRes.status === 404) {
-            meRes = await fetch(`${API_BASE}/auth/me`, {
-              headers: { Authorization: `Bearer ${userToken}` },
-            });
-          }
           if (meRes.ok) {
             const meData = await meRes.json();
             localStorage.setItem('currentUser', JSON.stringify(meData));
             setCurrentUser(meData);
           }
         }
-
-        fetchData(userToken);
+        fetchData(activeToken);
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Authentication request failed');
+      setErrorMsg(err.message || 'Action failed');
     } finally {
       setLoading(false);
     }
@@ -197,260 +166,99 @@ export default function App() {
 
   const handleAssignRole = async (userId, roleName) => {
     if (!roleName) return;
-    setErrorMsg('');
-    setSuccessMsg('');
-
     try {
       const res = await fetch(`${API_BASE}/users/${userId}/roles`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ role_name: roleName }),
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed to update role');
-
-      setSuccessMsg('Role clearance updated successfully!');
-      fetchData(token);
-      setTimeout(() => setSuccessMsg(''), 4000);
+      if (res.ok) {
+        setSuccessMsg('Role clearance updated successfully!');
+        fetchData(token);
+        setTimeout(() => setSuccessMsg(''), 3000);
+      }
     } catch (err) {
-      setErrorMsg(err.message);
-      setTimeout(() => setErrorMsg(''), 4000);
+      console.error(err);
     }
   };
 
-  const isAdmin = currentUser?.roles?.some(
-    (r) => (r.name || r).toLowerCase() === 'admin'
-  );
+  const isAdmin = currentUser?.roles?.some((r) => (r.name || r).toLowerCase() === 'admin');
 
-  const containerStyle = {
-    minHeight: '100vh',
-    backgroundColor: '#0f172a',
-    color: '#f8fafc',
-    fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '24px',
-    boxSizing: 'border-box',
-  };
-
-  const cardStyle = {
-    width: '100%',
-    maxWidth: '430px',
-    backgroundColor: '#1e293b',
-    border: '1px solid #334155',
-    borderRadius: '16px',
-    padding: '36px 32px',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.65)',
-    boxSizing: 'border-box',
-  };
-
-  const inputStyle = {
-    width: '100%',
-    padding: '12px 14px',
-    backgroundColor: '#0f172a',
-    border: '1px solid #334155',
-    borderRadius: '10px',
-    color: '#ffffff',
-    fontSize: '14px',
-    outline: 'none',
-    boxSizing: 'border-box',
-    marginBottom: '16px',
-  };
-
-  const labelStyle = {
-    display: 'block',
-    fontSize: '11px',
-    fontWeight: '700',
-    letterSpacing: '0.08em',
-    color: '#94a3b8',
-    marginBottom: '6px',
-    textTransform: 'uppercase',
-  };
-
-  // Auth Screen
+  // VIEW 1: Login / Signup
   if (!token) {
     return (
-      <div style={containerStyle}>
-        <div style={cardStyle}>
-          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <div
-              style={{
-                width: '48px',
-                height: '48px',
-                margin: '0 auto 12px',
-                borderRadius: '12px',
-                backgroundColor: 'rgba(99, 102, 241, 0.15)',
-                border: '1px solid rgba(99, 102, 241, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '24px',
-              }}
-            >
-              🛡️
-            </div>
-            <h1 style={{ margin: '0 0 6px', fontSize: '24px', fontWeight: '800', color: '#ffffff' }}>
-              AuthGuard Console
-            </h1>
-            <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8' }}>
-              Identity &amp; Role Management
-            </p>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-[#1e1b4b]">
+        <div className="w-full max-w-md bg-[#2e2a72]/90 border border-indigo-500/30 rounded-2xl shadow-2xl p-8 text-white">
+          <div className="text-center mb-6">
+            <span className="text-3xl">🛡️</span>
+            <h1 className="text-2xl font-bold mt-2">AuthGuard Console</h1>
+            <p className="text-xs text-indigo-200 mt-1">Identity &amp; Role Management</p>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              backgroundColor: '#0f172a',
-              padding: '4px',
-              borderRadius: '10px',
-              marginBottom: '22px',
-            }}
-          >
+          <div className="flex bg-[#1e1b4b]/80 p-1 rounded-xl mb-6 border border-indigo-900/50">
             <button
-              type="button"
-              onClick={() => {
-                setAuthMode('login');
-                setErrorMsg('');
-                setSuccessMsg('');
-              }}
-              style={{
-                flex: 1,
-                padding: '9px 0',
-                fontSize: '13px',
-                fontWeight: '600',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                backgroundColor: authMode === 'login' ? '#4f46e5' : 'transparent',
-                color: authMode === 'login' ? '#ffffff' : '#94a3b8',
-              }}
+              onClick={() => { setAuthMode('login'); setErrorMsg(''); setSuccessMsg(''); }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                authMode === 'login' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-300'
+              }`}
             >
               Sign In
             </button>
             <button
-              type="button"
-              onClick={() => {
-                setAuthMode('register');
-                setErrorMsg('');
-                setSuccessMsg('');
-              }}
-              style={{
-                flex: 1,
-                padding: '9px 0',
-                fontSize: '13px',
-                fontWeight: '600',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                backgroundColor: authMode === 'register' ? '#4f46e5' : 'transparent',
-                color: authMode === 'register' ? '#ffffff' : '#94a3b8',
-              }}
+              onClick={() => { setAuthMode('register'); setErrorMsg(''); setSuccessMsg(''); }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                authMode === 'register' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-300'
+              }`}
             >
               Register
             </button>
           </div>
 
-          {errorMsg && (
-            <div
-              style={{
-                backgroundColor: 'rgba(153, 27, 27, 0.35)',
-                border: '1px solid #b91c1c',
-                borderRadius: '10px',
-                padding: '10px 14px',
-                marginBottom: '16px',
-                fontSize: '12px',
-                color: '#fca5a5',
-              }}
-            >
-              ⚠️ {errorMsg}
-            </div>
-          )}
+          {errorMsg && <div className="mb-4 p-3 bg-rose-950/60 border border-rose-700 text-rose-200 text-xs rounded-xl">⚠️ {errorMsg}</div>}
+          {successMsg && <div className="mb-4 p-3 bg-emerald-950/60 border border-emerald-700 text-emerald-200 text-xs rounded-xl">✓ {successMsg}</div>}
 
-          {successMsg && (
-            <div
-              style={{
-                backgroundColor: 'rgba(6, 95, 70, 0.35)',
-                border: '1px solid #059669',
-                borderRadius: '10px',
-                padding: '10px 14px',
-                marginBottom: '16px',
-                fontSize: '12px',
-                color: '#6ee7b7',
-              }}
-            >
-              ✓ {successMsg}
-            </div>
-          )}
-
-          <form onSubmit={handleAuthSubmit}>
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
             {authMode === 'register' && (
               <div>
-                <label style={labelStyle}>Full Name</label>
+                <label className="block text-[11px] font-bold text-indigo-200 tracking-wider mb-1 uppercase">Full Name</label>
                 <input
                   type="text"
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Your Name"
-                  style={inputStyle}
+                  className="w-full px-3.5 py-2.5 bg-[#16143c] border border-indigo-500/40 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-400"
                 />
               </div>
             )}
-
             <div>
-              <label style={labelStyle}>Work Email</label>
+              <label className="block text-[11px] font-bold text-indigo-200 tracking-wider mb-1 uppercase">Work Email</label>
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
-                style={inputStyle}
+                className="w-full px-3.5 py-2.5 bg-[#16143c] border border-indigo-500/40 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-400"
               />
             </div>
-
             <div>
-              <label style={labelStyle}>Password</label>
+              <label className="block text-[11px] font-bold text-indigo-200 tracking-wider mb-1 uppercase">Password</label>
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                style={inputStyle}
+                className="w-full px-3.5 py-2.5 bg-[#16143c] border border-indigo-500/40 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-400"
               />
             </div>
-
             <button
               type="submit"
               disabled={loading}
-              style={{
-                width: '100%',
-                padding: '13px',
-                backgroundColor: '#4f46e5',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '10px',
-                fontSize: '14px',
-                fontWeight: '700',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1,
-                boxShadow: '0 10px 15px -3px rgba(79, 70, 229, 0.3)',
-                marginTop: '6px',
-              }}
+              className="w-full mt-3 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg transition-all"
             >
-              {loading
-                ? 'Processing...'
-                : authMode === 'login'
-                ? 'Sign In to Portal →'
-                : 'Create Account (Unassigned) →'}
+              {loading ? 'Processing...' : authMode === 'login' ? 'Sign In to Portal →' : 'Create Account →'}
             </button>
           </form>
         </div>
@@ -458,46 +266,21 @@ export default function App() {
     );
   }
 
-  // Dashboard Screen
+  // VIEW 2: Beautiful Directory Dashboard
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        backgroundColor: '#0f172a',
-        color: '#f8fafc',
-        padding: '40px 24px',
-        fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
-      }}
-    >
-      <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingBottom: '24px',
-            borderBottom: '1px solid #334155',
-            marginBottom: '24px',
-          }}
-        >
+    <div className="min-h-screen bg-[#1e1b4b] text-slate-100 p-6 md:p-10">
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center pb-6 border-b border-indigo-900/50">
           <div>
-            <h1 style={{ margin: '0 0 6px', fontSize: '28px', fontWeight: '800' }}>
-              User &amp; Role Directory
-            </h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#94a3b8' }}>
-              <span>
-                Signed in as: <strong style={{ color: '#ffffff' }}>{currentUser?.full_name || currentUser?.email}</strong>
-              </span>
+            <h1 className="text-3xl font-extrabold tracking-tight text-white">User &amp; Role Directory</h1>
+            <div className="flex items-center gap-2 mt-2 text-sm text-indigo-200">
+              <span>Signed in as: <strong className="text-white">{currentUser?.full_name || currentUser?.email}</strong></span>
               {currentUser?.roles?.map((r) => (
                 <span
                   key={r.id || r.name || r}
-                  style={{
-                    ...getRoleBadgeStyle(r.name || r),
-                    padding: '2px 8px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                  }}
+                  style={{ cssText: getRoleBadgeStyle(r.name || r) }}
+                  className="px-2.5 py-0.5 rounded-md text-xs font-bold shadow-sm inline-block ml-1"
                 >
                   {r.name || r}
                 </span>
@@ -506,137 +289,85 @@ export default function App() {
           </div>
           <button
             onClick={handleSignOut}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#1e293b',
-              border: '1px solid #334155',
-              borderRadius: '8px',
-              color: '#f8fafc',
-              fontSize: '13px',
-              fontWeight: '600',
-              cursor: 'pointer',
-            }}
+            className="px-4 py-2 bg-[#2e2a72] hover:bg-indigo-700 border border-indigo-500/40 rounded-xl text-xs font-bold text-white transition-all shadow-md"
           >
             Sign Out
           </button>
         </div>
 
+        {/* Success Alert */}
         {successMsg && (
-          <div
-            style={{
-              backgroundColor: 'rgba(6, 95, 70, 0.35)',
-              border: '1px solid #059669',
-              borderRadius: '10px',
-              padding: '12px',
-              textAlign: 'center',
-              fontSize: '13px',
-              color: '#6ee7b7',
-              marginBottom: '20px',
-            }}
-          >
+          <div className="p-3 bg-emerald-900/50 border border-emerald-500 rounded-xl text-emerald-200 text-center text-xs font-semibold">
             ✓ {successMsg}
           </div>
         )}
 
-        <div
-          style={{
-            backgroundColor: '#1e293b',
-            border: '1px solid #334155',
-            borderRadius: '16px',
-            overflow: 'hidden',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-          }}
-        >
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+        {/* Directory Table */}
+        <div className="bg-[#2a2663]/90 border border-indigo-500/30 rounded-2xl overflow-hidden shadow-2xl">
+          <table className="w-full text-left text-xs">
             <thead>
-              <tr
-                style={{
-                  backgroundColor: '#0f172a',
-                  borderBottom: '1px solid #334155',
-                  color: '#94a3b8',
-                  fontSize: '11px',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                <th style={{ padding: '16px 20px' }}>UID</th>
-                <th style={{ padding: '16px 20px' }}>NAME</th>
-                <th style={{ padding: '16px 20px' }}>EMAIL</th>
-                <th style={{ padding: '16px 20px' }}>ASSIGNED ROLES</th>
-                <th style={{ padding: '16px 20px', textAlign: 'right' }}>ADMIN ACTION</th>
+              <tr className="bg-[#1a1740] border-b border-indigo-900/60 text-[11px] uppercase tracking-wider text-indigo-300">
+                <th className="py-4 px-6 font-bold">UID</th>
+                <th className="py-4 px-6 font-bold">NAME</th>
+                <th className="py-4 px-6 font-bold">EMAIL</th>
+                <th className="py-4 px-6 font-bold">ASSIGNED ROLES</th>
+                <th className="py-4 px-6 font-bold text-right">ADMIN ACTION: ASSIGN ROLE</th>
               </tr>
             </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id} style={{ borderBottom: '1px solid #334155' }}>
-                  <td style={{ padding: '16px 20px', color: '#818cf8', fontFamily: 'monospace', fontWeight: 'bold' }}>
-                    #{u.id}
-                  </td>
-                  <td style={{ padding: '16px 20px', color: '#ffffff', fontWeight: '600' }}>
-                    {u.full_name || '—'}
-                  </td>
-                  <td style={{ padding: '16px 20px', color: '#94a3b8', fontFamily: 'monospace' }}>
-                    {u.email}
-                  </td>
-                  <td style={{ padding: '16px 20px' }}>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {u.roles && u.roles.length > 0 ? (
-                        u.roles.map((r) => (
-                          <span
-                            key={r.id || r.name || r}
-                            style={{
-                              ...getRoleBadgeStyle(r.name || r),
-                              padding: '4px 10px',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                            }}
-                          >
-                            {r.name || r}
-                          </span>
-                        ))
-                      ) : (
-                        <span style={{ color: '#64748b', fontStyle: 'italic', fontSize: '12px' }}>
-                          Unassigned
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                    {isAdmin ? (
-                      <select
-                        defaultValue=""
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            handleAssignRole(u.id, e.target.value);
-                            e.target.value = '';
-                          }
-                        }}
-                        style={{
-                          backgroundColor: '#0f172a',
-                          border: '1px solid #334155',
-                          borderRadius: '8px',
-                          color: '#ffffff',
-                          padding: '7px 12px',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                          outline: 'none',
-                        }}
-                      >
-                        <option value="" disabled>+ Assign Role...</option>
-                        {roles.map((r) => (
-                          <option key={r.id || r.name} value={r.name}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span style={{ color: '#475569', fontStyle: 'italic', fontSize: '12px' }}>
-                        Restricted
-                      </span>
-                    )}
+            <tbody className="divide-y divide-indigo-950/60">
+              {users.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="py-8 text-center text-indigo-300 italic">
+                    No users found. (Create accounts or sign in as Admin to manage).
                   </td>
                 </tr>
-              ))}
+              ) : (
+                users.map((u) => (
+                  <tr key={u.id} className="hover:bg-indigo-900/20 transition-colors">
+                    <td className="py-4 px-6 font-bold text-indigo-400 font-mono">#{u.id}</td>
+                    <td className="py-4 px-6 font-bold text-white text-sm">{u.full_name || '—'}</td>
+                    <td className="py-4 px-6 text-indigo-200 font-mono">{u.email}</td>
+                    <td className="py-4 px-6">
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        {u.roles && u.roles.length > 0 ? (
+                          u.roles.map((r) => (
+                            <span
+                              key={r.id || r.name || r}
+                              style={{ cssText: getRoleBadgeStyle(r.name || r) }}
+                              className="px-3 py-1 rounded-md text-xs font-bold tracking-wide shadow"
+                            >
+                              {r.name || r}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-slate-400 italic text-xs">Unassigned</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      {isAdmin ? (
+                        <select
+                          defaultValue=""
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              handleAssignRole(u.id, e.target.value);
+                              e.target.value = '';
+                            }
+                          }}
+                          className="bg-[#16143c] border border-indigo-500/40 text-white text-xs rounded-lg px-3 py-1.5 outline-none cursor-pointer"
+                        >
+                          <option value="" disabled>+ Assign Role...</option>
+                          {roles.map((r) => (
+                            <option key={r.id || r.name} value={r.name}>{r.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-indigo-400/60 italic text-xs">Restricted</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -166,18 +166,22 @@ export default function App() {
     setRoles([]);
   };
 
-  const handleAssignRole = async (userId, roleName) => {
-    if (!roleName) return;
+  // UPDATE 1: roleId le kar body me integer bhejna (422 fix)
+  const handleAssignRole = async (userId, roleId) => {
+    if (!roleId) return;
     try {
       const res = await fetch(`${API_BASE}/api/v1/users/${userId}/roles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ role_name: roleName })
+        body: JSON.stringify({ role_id: parseInt(roleId, 10) })
       });
       if (res.ok) {
-        setSuccessMsg(`Role ${roleName} assigned successfully!`);
+        setSuccessMsg('Role assigned successfully!');
         fetchData(token);
         setTimeout(() => setSuccessMsg(''), 3000);
+      } else {
+        const data = await res.json();
+        setErrorMsg(data.detail || 'Failed to assign role');
       }
     } catch (err) {
       console.error(err);
@@ -295,6 +299,12 @@ export default function App() {
           </div>
         )}
 
+        {errorMsg && (
+          <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#fca5a5', padding: '12px', borderRadius: '8px', fontSize: '13px', fontWeight: '600', textAlign: 'center', marginBottom: '20px' }}>
+            ⚠️ {errorMsg}
+          </div>
+        )}
+
         <div style={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '16px', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead>
@@ -351,8 +361,11 @@ export default function App() {
                           style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#ffffff', padding: '7px 12px', fontSize: '12px', cursor: 'pointer', outline: 'none' }}
                         >
                           <option value="" disabled>+ Assign Role...</option>
+                          {/* UPDATE 2: value me role.id pass kar rahe hain */}
                           {roles.map((r) => (
-                            <option key={r.id || r.name} value={r.name}>{r.name}</option>
+                            <option key={r.id || r.name} value={r.id}>
+                              {r.name}
+                            </option>
                           ))}
                         </select>
                       ) : (

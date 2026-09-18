@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://fastapi-user-roles-api.onrender.com';
 
-// Dynamic Colorful Badges (Pure Inline JS Styles)
 const getRoleBadgeStyle = (roleName) => {
   const name = (roleName || '').trim();
   const lower = name.toLowerCase();
@@ -12,19 +11,19 @@ const getRoleBadgeStyle = (roleName) => {
 
   if (lower === 'admin') {
     bg = '#4338ca';
-    border = '#6366f1'; // Indigo
+    border = '#6366f1';
   } else if (lower === 'editor') {
     bg = '#b45309';
-    border = '#f59e0b'; // Amber
+    border = '#f59e0b';
   } else if (lower === 'developer') {
     bg = '#0f766e';
-    border = '#14b8a6'; // Teal
+    border = '#14b8a6';
   } else if (lower === 'hacker') {
     bg = '#be185d';
-    border = '#f472b6'; // Neon Rose
+    border = '#f472b6';
   } else if (lower.includes('sentinel') || lower.includes('cyber')) {
     bg = '#047857';
-    border = '#10b981'; // Emerald
+    border = '#10b981';
   } else {
     const palette = [
       { bg: '#6d28d9', border: '#a78bfa' },
@@ -73,18 +72,22 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
 
+  // Fetch using the exact /api/v1/ prefix matching Swagger
   const fetchData = async (activeToken = token) => {
     if (!activeToken) return;
     try {
       const [resUsers, resRoles] = await Promise.all([
-        fetch(`${API_BASE}/users`, { headers: { Authorization: `Bearer ${activeToken}` } }),
-        fetch(`${API_BASE}/roles`, { headers: { Authorization: `Bearer ${activeToken}` } }),
+        fetch(`${API_BASE}/api/v1/users`, { headers: { Authorization: `Bearer ${activeToken}` } }),
+        fetch(`${API_BASE}/api/v1/roles`, { headers: { Authorization: `Bearer ${activeToken}` } }),
       ]);
 
-      if (resUsers.ok && resRoles.ok) {
+      if (resUsers.ok) {
         setUsers(await resUsers.json());
+      }
+      if (resRoles.ok) {
         setRoles(await resRoles.json());
-      } else if (resUsers.status === 401) {
+      }
+      if (resUsers.status === 401) {
         handleSignOut();
       }
     } catch (err) {
@@ -106,41 +109,21 @@ export default function App() {
 
     try {
       if (authMode === 'register') {
-        const payload = JSON.stringify({ email: email.trim(), password, full_name: fullName.trim() });
-        let res = await fetch(`${API_BASE}/signup`, {
+        const res = await fetch(`${API_BASE}/signup`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: payload,
+          body: JSON.stringify({ email: email.trim(), password, name: fullName.trim(), full_name: fullName.trim() }),
         });
-        if (res.status === 404) {
-          res = await fetch(`${API_BASE}/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: payload,
-          });
-        }
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Registration failed');
-        setSuccessMsg('Registration successful! Please sign in.');
+        setSuccessMsg('Account registered successfully! Please sign in.');
         setAuthMode('login');
       } else {
-        const payload = JSON.stringify({ email: email.trim(), password });
-        let res = await fetch(`${API_BASE}/login`, {
+        const res = await fetch(`${API_BASE}/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: payload,
+          body: JSON.stringify({ email: email.trim(), password }),
         });
-
-        if (res.status === 404 || res.status === 422) {
-          const form = new URLSearchParams();
-          form.append('username', email.trim());
-          form.append('password', password);
-          res = await fetch(`${API_BASE}/token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: form,
-          });
-        }
 
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Invalid email or password');
@@ -153,7 +136,7 @@ export default function App() {
           localStorage.setItem('currentUser', JSON.stringify(data.user));
           setCurrentUser(data.user);
         } else {
-          let meRes = await fetch(`${API_BASE}/users/me`, {
+          const meRes = await fetch(`${API_BASE}/api/v1/users/me`, {
             headers: { Authorization: `Bearer ${activeToken}` },
           });
           if (meRes.ok) {
@@ -183,7 +166,7 @@ export default function App() {
   const handleAssignRole = async (userId, roleName) => {
     if (!roleName) return;
     try {
-      const res = await fetch(`${API_BASE}/users/${userId}/roles`, {
+      const res = await fetch(`${API_BASE}/api/v1/users/${userId}/roles`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ role_name: roleName }),
@@ -198,9 +181,6 @@ export default function App() {
     }
   };
 
-  const isAdmin = currentUser?.roles?.some((r) => (r.name || r).toLowerCase() === 'admin');
-
-  // VIEW 1: Login / Sign Up Screen
   if (!token) {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -215,13 +195,13 @@ export default function App() {
           <div style={{ display: 'flex', backgroundColor: '#0f172a', padding: '4px', borderRadius: '10px', marginBottom: '20px', border: '1px solid #334155' }}>
             <button
               onClick={() => { setAuthMode('login'); setErrorMsg(''); setSuccessMsg(''); }}
-              style={{ flex: 1, padding: '9px 0', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '12px', color: '#ffffff', backgroundColor: authMode === 'login' ? '#4f46e5' : 'transparent', transition: '0.2s' }}
+              style={{ flex: 1, padding: '9px 0', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '12px', color: '#ffffff', backgroundColor: authMode === 'login' ? '#4f46e5' : 'transparent' }}
             >
               Sign In
             </button>
             <button
               onClick={() => { setAuthMode('register'); setErrorMsg(''); setSuccessMsg(''); }}
-              style={{ flex: 1, padding: '9px 0', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '12px', color: '#ffffff', backgroundColor: authMode === 'register' ? '#4f46e5' : 'transparent', transition: '0.2s' }}
+              style={{ flex: 1, padding: '9px 0', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '12px', color: '#ffffff', backgroundColor: authMode === 'register' ? '#4f46e5' : 'transparent' }}
             >
               Register
             </button>
@@ -269,7 +249,7 @@ export default function App() {
             <button
               type="submit"
               disabled={loading}
-              style={{ width: '100%', padding: '12px', backgroundColor: '#4f46e5', border: 'none', borderRadius: '8px', color: '#ffffff', fontWeight: '700', fontSize: '13px', cursor: 'pointer', marginTop: '6px', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.4)' }}
+              style={{ width: '100%', padding: '12px', backgroundColor: '#4f46e5', border: 'none', borderRadius: '8px', color: '#ffffff', fontWeight: '700', fontSize: '13px', cursor: 'pointer', marginTop: '6px' }}
             >
               {loading ? 'Processing...' : authMode === 'login' ? 'Sign In to Portal →' : 'Create Account →'}
             </button>
@@ -280,7 +260,6 @@ export default function App() {
     );
   }
 
-  // VIEW 2: Dashboard & Live Sync Directory
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', color: '#f8fafc', padding: '36px 24px', fontFamily: 'system-ui, -apple-system, sans-serif', boxSizing: 'border-box' }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
@@ -290,7 +269,7 @@ export default function App() {
           <div>
             <h1 style={{ fontSize: '26px', fontWeight: '800', margin: '0 0 6px', color: '#ffffff' }}>User &amp; Role Directory</h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#94a3b8' }}>
-              <span>Signed in as: <strong style={{ color: '#ffffff' }}>{currentUser?.full_name || currentUser?.email}</strong></span>
+              <span>Signed in as: <strong style={{ color: '#ffffff' }}>{currentUser?.name || currentUser?.full_name || currentUser?.email}</strong></span>
               {currentUser?.roles?.map((r, i) => (
                 <span key={i} style={getRoleBadgeStyle(r.name || r)}>
                   {r.name || r}
@@ -339,7 +318,7 @@ export default function App() {
                       #{u.id}
                     </td>
                     <td style={{ padding: '16px 20px', color: '#ffffff', fontWeight: '600' }}>
-                      {u.full_name || '—'}
+                      {u.name || u.full_name || '—'}
                     </td>
                     <td style={{ padding: '16px 20px', color: '#94a3b8', fontFamily: 'monospace' }}>
                       {u.email}
@@ -358,25 +337,21 @@ export default function App() {
                       </div>
                     </td>
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                      {isAdmin ? (
-                        <select
-                          defaultValue=""
-                          onChange={(e) => {
-                            if (e.target.value) {
-                              handleAssignRole(u.id, e.target.value);
-                              e.target.value = '';
-                            }
-                          }}
-                          style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#ffffff', padding: '7px 12px', fontSize: '12px', cursor: 'pointer', outline: 'none' }}
-                        >
-                          <option value="" disabled>+ Assign Role...</option>
-                          {roles.map((r) => (
-                            <option key={r.id || r.name} value={r.name}>{r.name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span style={{ color: '#64748b', fontStyle: 'italic', fontSize: '12px' }}>Restricted</span>
-                      )}
+                      <select
+                        defaultValue=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleAssignRole(u.id, e.target.value);
+                            e.target.value = '';
+                          }
+                        }}
+                        style={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#ffffff', padding: '7px 12px', fontSize: '12px', cursor: 'pointer', outline: 'none' }}
+                      >
+                        <option value="" disabled>+ Assign Role...</option>
+                        {roles.map((r) => (
+                          <option key={r.id || r.name} value={r.name}>{r.name}</option>
+                        ))}
+                      </select>
                     </td>
                   </tr>
                 ))

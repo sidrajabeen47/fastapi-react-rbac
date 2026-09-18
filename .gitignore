@@ -1,0 +1,17 @@
+﻿# Python / Backend
+fastapi_user_roles/venv/
+fastapi_user_roles/__pycache__/
+fastapi_user_roles/.env
+*.pyc
+*.db
+*.sqlite3
+
+# Node / Frontend
+user-roles-frontend/node_modules/
+user-roles-frontend/dist/
+user-roles-frontend/.env
+user-roles-frontend/.env.local
+
+# OS files
+.DS_Store
+Thumbs.db

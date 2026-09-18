@@ -32,7 +32,7 @@ app.add_middleware(
         "http://localhost:3000",
         "https://fastapi-user-roles-frontend.onrender.com",
         "https://fastapi-react-rbac-frontend.onrender.com",
-        "*",
+        
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -9,18 +9,18 @@ const getRoleBadgeStyle = (roleName) => {
   const name = (roleName || '').trim();
   const lower = name.toLowerCase();
 
-  // Primary Anchor Roles
+  // Core anchor roles
   if (lower === 'admin') {
-    return { backgroundColor: '#4f46e5', color: '#ffffff', border: '1px solid #6366f1' }; // Indigo
+    return { backgroundColor: '#4f46e5', color: '#ffffff', border: '1px solid #6366f1' };
   }
   if (lower === 'editor') {
-    return { backgroundColor: '#d97706', color: '#ffffff', border: '1px solid #f59e0b' }; // Amber
+    return { backgroundColor: '#d97706', color: '#ffffff', border: '1px solid #f59e0b' };
   }
 
-  // Vivid Palette for ALL other custom/future roles
+  // Vivid Palette for ALL other custom and newly created roles
   const palette = [
     { bg: '#0d9488', border: '#14b8a6' }, // Teal
-    { bg: '#db2777', border: '#f472b6' }, // Pink/Rose
+    { bg: '#db2777', border: '#f472b6' }, // Pink / Rose
     { bg: '#059669', border: '#10b981' }, // Emerald
     { bg: '#0284c7', border: '#38bdf8' }, // Sky Blue
     { bg: '#7c3aed', border: '#a78bfa' }, // Violet
@@ -61,7 +61,7 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
 
-  // Fetch Directory Data
+  // Fetch directory list
   const fetchData = async (currentToken = token) => {
     if (!currentToken) return;
     try {
@@ -93,7 +93,7 @@ export default function App() {
     }
   }, [token]);
 
-  // Auth Submit with automatic endpoint fallback
+  // Auth Handler with /login and /signup endpoints
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -108,7 +108,6 @@ export default function App() {
           full_name: fullName.trim(),
         });
 
-        // Try /signup first, fallback to /auth/register
         let res = await fetch(`${API_BASE}/signup`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -129,19 +128,23 @@ export default function App() {
         setSuccessMsg('Account registered successfully! Please sign in.');
         setAuthMode('login');
       } else {
-        const formData = new URLSearchParams();
-        formData.append('username', email.trim());
-        formData.append('password', password);
-
-        // Try /token first, fallback to /auth/token
-        let res = await fetch(`${API_BASE}/token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: formData,
+        const payload = JSON.stringify({
+          email: email.trim(),
+          password: password,
         });
 
-        if (res.status === 404) {
-          res = await fetch(`${API_BASE}/auth/token`, {
+        let res = await fetch(`${API_BASE}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        });
+
+        if (res.status === 404 || res.status === 422) {
+          const formData = new URLSearchParams();
+          formData.append('username', email.trim());
+          formData.append('password', password);
+
+          res = await fetch(`${API_BASE}/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: formData,
@@ -151,30 +154,33 @@ export default function App() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Invalid email or password');
 
-        localStorage.setItem('token', data.access_token);
-        setToken(data.access_token);
+        const userToken = data.access_token || data.token;
+        localStorage.setItem('token', userToken);
+        setToken(userToken);
 
-        // Fetch User Info
-        let meRes = await fetch(`${API_BASE}/users/me`, {
-          headers: { Authorization: `Bearer ${data.access_token}` },
-        });
-
-        if (meRes.status === 404) {
-          meRes = await fetch(`${API_BASE}/auth/me`, {
-            headers: { Authorization: `Bearer ${data.access_token}` },
+        if (data.user) {
+          localStorage.setItem('currentUser', JSON.stringify(data.user));
+          setCurrentUser(data.user);
+        } else {
+          let meRes = await fetch(`${API_BASE}/users/me`, {
+            headers: { Authorization: `Bearer ${userToken}` },
           });
+          if (meRes.status === 404) {
+            meRes = await fetch(`${API_BASE}/auth/me`, {
+              headers: { Authorization: `Bearer ${userToken}` },
+            });
+          }
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            localStorage.setItem('currentUser', JSON.stringify(meData));
+            setCurrentUser(meData);
+          }
         }
 
-        if (meRes.ok) {
-          const meData = await meRes.json();
-          localStorage.setItem('currentUser', JSON.stringify(meData));
-          setCurrentUser(meData);
-        }
-
-        fetchData(data.access_token);
+        fetchData(userToken);
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Network request failed');
+      setErrorMsg(err.message || 'Authentication request failed');
     } finally {
       setLoading(false);
     }
@@ -266,9 +272,7 @@ export default function App() {
     textTransform: 'uppercase',
   };
 
-  // --------------------------------------------------
-  // Screen 1: Auth Screen
-  // --------------------------------------------------
+  // Auth Screen
   if (!token) {
     return (
       <div style={containerStyle}>
@@ -454,9 +458,7 @@ export default function App() {
     );
   }
 
-  // --------------------------------------------------
-  // Screen 2: Dashboard Table with Vivid Badges
-  // --------------------------------------------------
+  // Dashboard Screen
   return (
     <div
       style={{
